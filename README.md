@@ -146,7 +146,13 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `s15_v3_configuration_detail.maintain_period_duration` | `tier_maintain_period_years` | |
 | `s15_v3_configuration_detail.enable_include_tier_limit` | `tier_action_limit_enabled` | `enum: {0:false, 1:true}` |
 | `s15_v3_configuration_detail.auto_delivery_enable` | `auto_delivery_enabled` | `enum: {0:false, 1:true}` |
-| *(no MySQL source)* | `order_discount_disabled` | No MySQL source; default `false` |
+| `s15_v3_loyalty_setting.enable_disable_order_discount` | `order_discount_disabled` | default `false` |
+| `s15_v3_configuration_detail.enable_reward_denomination` | `reward_denomination_enabled` | `enum: {0:false, 1:true}` |
+| `s15_v3_configuration_detail.reward_denomination` | `reward_denomination_value` | |
+| `s15_v3_loyalty_setting.enable_rewards_issuance` | `enable_rewards_issuance` | `enum: {0:false, 1:true}` |
+| `site_detail.enable_tiertype_basedon_tier_anniversary` | `tier_anniversary_type_enabled` | `enum: {0:false, 1:true}` |
+| `s15_v3_configuration_detail.credits_to_currency_value_upto_decimal` | `currency_per_credit_precision` | |
+| `s15_v3_configuration_detail.enable_storeid_validation` | `store_validation_on_redeem_enabled` | `enum: {0:false, 1:true}` |
 
 <details>
 <summary>Unmapped columns</summary>
@@ -166,12 +172,12 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 |---|---|---|
 | `site_detail.site_id` | `site_id` | |
 | `site_detail.enable_buckets` | `multi_bucket_enabled` | `enum: {0:false, 1:true}` |
-| `s15_v3_configuration_detail.tierv2_migration_status` | `is_tier_v2` | `enum: {0:false, 1:true}` |
+| `s15_v3_configuration_detail.tierv2_migration_status` | `is_tier_v2` | `enum: {0:false, 1:true, 2:true, 3:true}` |
 | `s15_v3_loyalty_setting.enable_customize_orderdate_in_orderapi` | `backdated_order_allowed` | `enum: {0:false, 1:true}` |
-| `s15_v3_loyalty_setting.hierarchy_status` | `is_hierarchy_active` | `enum: {0:false, 1:true}` |
+| `s15_v3_loyalty_setting.hierarchy_status` | `is_hierarchy_active` | `enum: {0:false, 1:true, 2:true}` |
 | `s15_v2_tab_setting.multitemplate_active` | `multi_template_allowed` | `enum: {0:false, 1:true}` |
 | `s15_v2_tab_setting.enable_receipt_submission` | `receipt_submission_enabled` | `enum: {0:false, 1:true}` |
-| `s15_v3_member_defination.member_level` | `member_definition_rules_enabled` | `enum: {0:false, 1:true}` |
+| `s15_v3_member_defination.member_level` | `member_definition_rules_enabled` | `enum: {0:false, 1–9:true}` |
 | `s15_v3_loyalty_setting.enable_survey_flag` | `survey_enabled` | `enum: {0:false, 1:true}` |
 | `s15_v3_loyalty_setting.enable_multi_language_flag` | `multilanguage_enabled` | `enum: {0:false, 1:true}` |
 | `s15_v3_loyalty_setting.is_webhook_active` | `webhook_enabled` | `enum: {0:false, 1:true}` |
@@ -378,6 +384,8 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 
 ### 2.6 `s15_v3_user_inactive_status_history` → `member_statuses`
 
+> **Note:** This table is marked `skip: true` in `table_column_mappings.json` and is excluded from automated data validation.
+
 | MySQL Column | PostgreSQL Column | Notes |
 |---|---|---|
 | `site_id` | `site_id` | |
@@ -513,7 +521,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `action_series_name` | `name` | |
 | `series_expire_type` | `duration_type` | |
 | `series_expire_days` | `duration_days` | |
-| `series_expire_recurring_type` | `duration_mode` | `enum: {0:null, 1:DAYS, 2:WEEKS, 3:MONTHS, 4:YEARS, 5:ANNIVERSARY, 6:DATE_RANGE}` |
+| `series_expire_recurring_type` | `duration_mode` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY, 6:DATE_RANGE}` |
 | `series_start_date` | `duration_start_date` | |
 | `series_end_date` | `duration_end_date` | |
 | `action_series_status` | `is_active` | `enum: {0:false, 1:true}` |
@@ -523,13 +531,14 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `tagline` | `tagline` | |
 | `terms_and_condition` | `terms` | |
 | `enable_series_milestone_limit` | `milestone_limit_enabled` | `enum: {0:false, 1:true}` |
-| `action_series_type` | `evaluation_type` | `enum: {0:COUNTS, 1:POINTS, 2:COUNT_AND_POINTS}` |
+| `action_series_type` | `evaluation_type` | `enum: {0:COUNT, 1:POINTS, 2:COUNT_AND_POINTS}` |
 | `action_series_type_min_points` | `minimum_threshold` | |
 | `points` | `bonus_points` | |
 | `hold_points` | `hold_points_days` | |
-| `points_expire_type` | `expiration_type` | |
-| `points_expire_days` | `expiration_unit` | |
-| `points_expire_year_value` | `expiration_value` | |
+| `points_expire_type` | `expiration_type` | `enum: {Rolling:ROLLING, Calendar:CALENDAR}` |
+| `points_expire_days` | `expiration_unit` | Calendar enum: `{Week (Mon - Sun):WEEK, Month:MONTH, Year:YEAR}`; only set when `points_expire_type = Calendar` |
+| `points_expire_days` | `expiration_value` | Used when `points_expire_type = Rolling` |
+| `points_expire_year_value` | `expiration_value` | Used when `points_expire_type = Calendar` |
 | `maximum_achievement_limit_value` | `max_achievement_limit` | |
 | `maximum_achievement_limit_recurring_type` | `max_achievement_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY}` |
 | `maximum_point_limit_value` | `max_point_limit` | |
@@ -555,7 +564,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `action_series_id` | `action_series_id` | Lookup `action_series.id` via `migrated_action_series_id` |
 | `action_id` | `action_id` | |
 | `threshold_points` | `action_count` | |
-| `minimum_amount_type` | `calculation_type` | `enum: {Only Count:ONLY_COUNT, Per Order:PER_ORDER, Total Purchase:TOTAL_PURCHASE, Base On Spend:BASE_ON_SPEND, Base On Point:BASE_ON_POINT}` |
+| `minimum_amount_type` | `calculation_type` | `enum: {Only Count:ONLY_COUNT, Per Order:PER_ORDER, Total Purchase:TOTAL_PURCHASE, Base On Spend:BASED_ON_SPEND, Base On Point:BASED_ON_POINT}` |
 | `minimum_amount` | `criteria_value` | |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
@@ -574,13 +583,14 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | MySQL Column | PostgreSQL Column | Notes |
 |---|---|---|
 | `site_id` | `site_id` | |
+| `transaction_type_id` | `purchase_action_id` | |
 | `transaction_type_id` | `migrated_transaction_type_id` | |
 | `transaction_type` | `item_type` | |
 | `ratio` | `multiplier` | |
 | `points_expiration_type` | `expiration_type` | `enum: {0:ROLLING, 1:CALENDAR}` |
-| `calendar_expire` | `expiration_unit` | `enum: {0:null, 1:WEEK, 2:MONTH, 3:YEAR}` |
-| `expire_in_days` | `expiration_value` | Used when `expiration_type=ROLLING` |
-| `points_expire_year_value` | `expiration_value` | Used when `expiration_type=CALENDAR` and `unit=YEAR` |
+| `calendar_expire` | `expiration_unit` | `enum: {1:WEEK, 2:MONTH, 3:YEAR}`; only set when `points_expiration_type = 1` (CALENDAR) |
+| `expire_in_days` | `expiration_value` | Used when `points_expiration_type = 0` (ROLLING) |
+| `points_expire_year_value` | `expiration_value` | Used when `points_expiration_type = 1` (CALENDAR) |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
 
@@ -588,7 +598,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 <summary>Unmapped columns</summary>
 
 **Unmapped MySQL:** `multitemplate_id` — see global note, `incentive_id`.
-**Unmapped PostgreSQL:** `id` (auto-generated UUID), `purchase_action_id`.
+**Unmapped PostgreSQL:** `id` (auto-generated UUID).
 </details>
 
 ---
@@ -666,9 +676,9 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `campaign_terms` | `terms` | |
 | `campaign_benefit_image_url` | `benefit_image_url` | |
 | `maximum_achievement_limit_value` | `max_achievement_limit` | |
-| `maximum_achievement_limit_flag` | `max_achievement_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY}` |
+| `maximum_achievement_limit_flag` | `max_achievement_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:CAMPAIGN, 6:INDIVIDUAL_VALIDITY}` |
 | `maximum_point_limit_value` | `max_point_limit` | |
-| `maximum_point_limit_flag` | `max_point_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY}` |
+| `maximum_point_limit_flag` | `max_point_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:CAMPAIGN, 6:INDIVIDUAL_VALIDITY}` |
 | `apply_one_milestone_individual_validity` | `single_milestone_per_validity_period` | `enum: {0:false, 1:true}` |
 | `campaign_benefit_name` | `benefit_name` | |
 | `campaign_points_expire_type` | `expiration_type` | `enum: {0:ROLLING, 1:CALENDAR}` |
@@ -706,11 +716,11 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `milestone_active_image_url` | `active_image_url` | |
 | `milestone_inactive_image_url` | `inactive_image_url` | |
 | `milestone_maximum_achievement_limit_value` | `max_achievement_limit` | |
-| `milestone_maximum_achievement_limit_flag` | `max_achievement_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:CAMPAIGN}` |
+| `milestone_maximum_achievement_limit_flag` | `max_achievement_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:CAMPAIGN, 6:INDIVIDUAL_VALIDITY}` |
 | `milestone_maximum_point_limit_value` | `max_point_limit` | |
-| `milestone_maximum_point_limit_flag` | `max_point_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:CAMPAIGN}` |
+| `milestone_maximum_point_limit_flag` | `max_point_limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:CAMPAIGN, 6:INDIVIDUAL_VALIDITY}` |
 | `milestone_product_id_based_bonus_flag` | `is_product_specific` | `enum: {0:false, 1:true}` |
-| `milestone_points_expire_type` | `expiration_type` | `enum: {0:ROLLING, 1:CALENDAR}` |
+| `milestone_points_expire_type` | `expiration_type` | `enum: {1:ROLLING, 2:CALENDAR}` |
 | `points_expire_year_value` | `expiration_unit` | `enum: {0:null, 1:WEEK, 2:MONTH, 3:YEAR}` |
 | `milestone_points_expire_value` | `expiration_value` | |
 | `create_date` | `created_at` | |
@@ -897,6 +907,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `user_badge_source` | `source` | |
 | `source_id` | `source_id` | |
 | `source_name` | `source_name` | |
+| `user_badge_reference` | `reference` | |
 | `note` | `note` | |
 | `expire_at` | `expiry_date` | |
 | `created_at` | `created_at` | |
@@ -988,6 +999,8 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `user_id` | `user_id` | Lookup `users.id` via `member_id` |
 | `tier_id` | `tier_id` | Lookup `tiers.id` via `migrated_tier_id` |
 | `program_id` | `program_id` | Lookup `programs.id` |
+| `tier_earned_group_id` | `tier_earned_group_id` | |
+| `manually_assigned` | `manually_assigned` | |
 | `reason` | `reason` | |
 | `expire_date` | `expiry_date` | |
 | `create_date` | `created_at` | |
@@ -1016,7 +1029,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `reward_id` | `reward_id` | Lookup `rewards.id` via `migrated_reward_id` |
 | `tier_id` | `tier_id` | Lookup `tiers.id` via `migrated_tier_id` |
 | `tier_redemption_eligible` | `is_eligible` | `enum: {0:false, 1:true}` |
-| `redemption_limit_period` | `limit_period` | |
+| `redemption_limit_period` | `limit_period` | `enum: {1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY_YEAR, 6:LIFETIME}` |
 | `redemption_limit` | `limit_value` | |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
@@ -1027,24 +1040,23 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 
 | MySQL Column | PostgreSQL Column | Notes |
 |---|---|---|
-| `id` (varchar 40) | `id` | |
+| `id` | `id` | |
 | `site_id` | `site_id` | |
 | `program_id` | `program_id` | |
-| `tier_id` | `tier_id` | |
-| `tier_benefit_details_id` | `tier_benefit_details_id` | |
-| `tier_benefit_type` | `benefit_type` | |
-| `tier_benefit_sub_type` | `benefit_sub_type` | |
-| `tier_benefit_value` | `benefit_value` | |
-| `tier_benefit_expire_type` | `expiration_type` | |
-| `tier_benefit_rolling_expire_days` | `rolling_expire_days` | |
-| `tier_benefit_calendar_expire_type` | `calendar_expire_type` | |
-| `tier_benefit_calendar_expire_value` | `calendar_expire_value` | |
-| `tier_benefit_action_limit_type` | `action_limit_type` | |
-| `tier_benefit_action_limit_rolling_days` | `action_limit_rolling_days` | |
-| `tier_benefit_action_limit_calendar_type` | `action_limit_calendar_type` | |
-| `tier_benefit_action_limit_calendar_value` | `action_limit_calendar_value` | |
-| `tier_benefit_interval_period_type` | `interval_period_type` | |
-| `tier_benefit_interval_period_limit` | `interval_period_limit` | |
+| `tier_id` | `tier_id` | Lookup `tiers.id` via `migrated_tier_id` |
+| `tier_benefit_type` | `type` | `enum: {1:WELCOME, 2:PURCHASE}` |
+| `tier_benefit_sub_type` | `sub_type` | `enum: {1:POINT, 2:REWARD, 3:MULTIPLIER, 4:OVERRIDE_ACTION_LIMIT_EXPIRATION}` |
+| `tier_benefit_details_id` | `reference_id` | FK to `actions.id` or `rewards.id` |
+| `tier_benefit_value` | `points` / `multiplier` / `action_max_points` | Maps to `points` (sub_type=1), `multiplier` (sub_type=3), `action_max_points` (sub_type=4) |
+| `tier_benefit_expire_type` | `expiration_type` | `enum: {0:ROLLING, 1:CALENDAR}` |
+| `tier_benefit_calendar_expire_type` | `expiration_unit` | `enum: {1:WEEK, 2:MONTH, 3:YEAR}` |
+| `tier_benefit_rolling_expire_days` | `expiration_value` | Used when `expiration_type=0` (ROLLING) |
+| `tier_benefit_calendar_expire_value` | `expiration_value` | Used when `expiration_type=1` (CALENDAR) |
+| `tier_benefit_action_limit_type` | `action_limit_type` | `enum: {0:ROLLING, 1:CALENDAR}` |
+| `tier_benefit_action_limit_calendar_type` | `action_period_unit` | `enum: {1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY}` |
+| `tier_benefit_action_limit_calendar_value` | `action_period_value` | |
+| `tier_benefit_interval_period_type` | `action_interval_period_type` | `enum: {0:null, 1:DAYS, 2:HOURS}` |
+| `tier_benefit_interval_period_limit` | `action_interval_period_limit` | |
 | `tier_benefit_start_date` | `start_date` | |
 | `tier_benefit_status` | `is_active` | |
 | `created_at` | `created_at` | |
@@ -1157,6 +1169,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `member_status` | `status` | `enum: {1:active, 0:inactive}` |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
+| `user_role` *(source)* | `group_role_id` | FK to `group_roles.id`; resolved from `user_role` enum (1→owner, 2→member) |
 
 ---
 
@@ -1185,11 +1198,11 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `allow_auto_transfer_points_to_group` | `auto_transfer_points_enabled` | `enum: {0:false, 1:true}` |
 | `allow_auto_transfer_points_on_joining` | `auto_transfer_on_join_enabled` | `enum: {0:false, 1:true}` |
 | `enable_auto_group_points_redemption` | `auto_redemption_enabled` | `enum: {0:false, 1:true}` |
-| `allow_group_points_redemption` | `redemption_allowed_for` | `enum: {0:NONE, 1:OWNER}` |
+| `allow_group_points_redemption` | `redemption_allowed_for` | `enum: {1:OWNER, 2:ALL_MEMBERS}` |
 | `group_invitation_acceptance_required` | `invitation_acceptance_required` | `enum: {0:false, 1:true}` |
 | `restrict_members_to_leave_group` | `restrict_member_exit` | `enum: {0:false, 1:true}` |
-| `group_deactivation_rule` | `dissolution_allowed_for` | `enum: {1:OWNER, 2:ADMIN}` |
-| `points_distribution_on_group_deactivation` | `dissolution_points_distribution` | `enum: {1:TRANSFER_TO_DEACTIVATOR, 2:REDISTRIBUTE}` |
+| `group_deactivation_rule` | `dissolution_allowed_for` | `enum: {1:OWNER, 2:ALL_MEMBERS}` |
+| `points_distribution_on_group_deactivation` | `dissolution_points_distribution` | `enum: {1:TRANSFER_TO_DEACTIVATOR, 2:TRANSFER_EQUAL, 3:TRANSFER_CONTRIBUTED}` |
 | `max_member_to_the_group` | `enforce_member_limit` | `enum: {0:false, 1:true}` |
 | `max_member_limit` | `max_member_limit` | |
 | `create_date` | `created_at` | |
@@ -1541,11 +1554,14 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `reward_image_url` | `image_url` | |
 | `reward_url` | `reward_url` | |
 | `video_url` | `video_url` | |
-| `approval_status` | `approval_status` | `enum: {1:draft, 2:scheduled, 3:live, 4:archived}` |
+| `actual_reward_id` | `custom_reward_id` | |
+| `approval_status` | `approval_status` | `enum: {0:draft, 1:scheduled, 2:live, 3:archived}` |
 | `limited_availability` | `limited_availability_enabled` | `enum: {0:false, 1:true}` |
 | `availability_start_date` | `limited_availability_start_date` | |
 | `availability_end_date` | `limited_availability_end_date` | |
 | `reward_sequence` | `sequence` | |
+| `s15_v3_reward_attribute_values.attribute_value` | `custom_attributes` | JSONB aggregated via LEFT JOIN `s15_v3_reward_attribute` → `s15_v3_reward_attribute_values` |
+| `s15_v3_reward_redemption_attributes.attribute_name` | `redemption_attributes` | JSONB aggregated from `s15_v3_reward_redemption_attributes` per `reward_id` |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
 
@@ -1558,7 +1574,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `site_id` | `site_id` | |
 | `reward_id` *(via `migrated_reward_id`)* | `reward_id` | |
 | `reward_code_expiration_flag` | `expiration_enabled` | `enum: {0:false, 1:true}` |
-| `reward_code_expiration_start_from` | `expiration_start_from` | `enum: {0:CODE_UPLOAD, 1:CODE_CLAIM}` |
+| `reward_code_expiration_start_from` | `expiration_start_from` | `enum: {1:CODE_UPLOAD, 2:CODE_CLAIM, default:CODE_UPLOAD}` |
 | `reward_code_expiration_type` | `expiration_type` | |
 | `reward_code_expiration_days` | `expires_after_days` | |
 | `reward_code_expiration_date` | `fixed_expiration_date` | |
@@ -1574,10 +1590,14 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | MySQL Column | PostgreSQL Column | Notes |
 |---|---|---|
 | `reward_id` *(via `migrated_reward_id`)* | `reward_id` | |
-| `reward_expiration_type` | `expiration_type` | |
+| *(derived)* | `expiration_enabled` | `true` when: type=1 AND `reward_expiration_days > 0`; OR type=2 AND both dates are valid non-zero |
+| `reward_expiration_type` | `expiration_type` | `enum: {1:ROLLING, 2:CALENDAR}` |
 | `reward_expiration_days` | `days_after_claim` | |
 | `reward_expiration_start_date` | `expiration_start_at` | |
 | `reward_expiration_end_date` | `expiration_end_at` | |
+| `fixed_expiration_date` | `fixed_expiration_date` | |
+| `create_date` | `created_at` | |
+| `update_date` | `updated_at` | |
 
 ---
 
@@ -1588,8 +1608,8 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `site_id` | `site_id` | |
 | `reward_id` *(via `migrated_reward_id`)* | `reward_id` | |
 | `automate_reward_flag` | `enabled` | `enum: {0:false, 1:true}` |
-| `automate_reward_type` | `basis` | `enum: {1:LIFETIME_POINTS, 2:AVAILABLE_POINT, 3:PURCHASE_AMOUNT}` |
-| `automate_reward_claim_flag` | `threshold_type` | `enum: {0:ROLLING, 1:FIXED}` |
+| `automate_reward_type` | `basis` | `enum: {1:LIFETIME_POINTS, 2:PURCHASE_AMOUNT, 3:AVAILABLE_POINT}` |
+| `automate_reward_claim_flag` | `threshold_type` | `enum: {1:ROLLING, 2:FIXED}` |
 | `automate_reward_credit_required` | `threshold_value` | |
 | `automate_reward_claim_limit` | `limit` | |
 | `automate_reward_claim_reason` | `reason` | |
@@ -1604,8 +1624,8 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 |---|---|---|
 | `site_id` | `site_id` | |
 | `reward_id` *(via `migrated_reward_id`)* | `reward_id` | |
-| `reward_eligibility_threshold` | `threshold_mode` | `enum: {0:FIXED, 1:RECURRING}` |
-| `credit_required_flag` | `threshold_basis` | `enum: {0:LIFETIME_POINTS, 1:PURCHASE_AMOUNT, 2:SEGMENT, 3:TIER}` |
+| `reward_eligibility_threshold` | `threshold_mode` | `enum: {1:FIXED, 2:RECURRING}` |
+| `credit_required_flag` | `threshold_basis` | `enum: {1:LIFETIME_POINTS, 2:PURCHASE_AMOUNT, 3:SEGMENT, 4:EARNED_POINTS_IN_CALENDAR_YEAR, 5:TIER}` |
 | `credit_required_flag_value` | `threshold_value` | |
 
 ---
@@ -1621,7 +1641,10 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `reward_eligible_value` | `eligibility_period_value` | |
 | `redemption_limit` | `limit_per_member` | |
 | `reward_claim_limit` | `limit_total` | |
-| `redemption_limit_duration` | `member_limit_period` | |
+| `redemption_limit_duration` | `member_limit_period` | `enum: {1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY_YEAR, 6:LIFETIME}` |
+| *(no MySQL source)* | `member_limit_value` | No direct MySQL source |
+| `create_date` | `created_at` | |
+| `update_date` | `updated_at` | |
 
 ---
 
@@ -1634,6 +1657,9 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `coupon_alert_email` | `alert_email` | |
 | `coupon_alert_email_subject` | `alert_email_subject` | |
 | `coupon_alert_email_body` | `alert_email_body` | |
+| *(no MySQL source)* | `last_alert_sent_at` | Always `NULL`; no MySQL equivalent |
+| `create_date` | `created_at` | |
+| `update_date` | `updated_at` | |
 
 ---
 
@@ -1660,6 +1686,7 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `site_id` | `site_id` | |
 | `id` | `migrated_category_id` | |
 | `category_name` | `name` | |
+| `category_sequence` | `level` | |
 | `reward_category_status` | `is_active` | `enum: {0:false, 1:true}` |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
@@ -1857,20 +1884,29 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 
 ### 10.6 `s15_v3_exclude_include_product_detail` → `item_rules`
 
+> One row per unique `(site_id, entity_type, entity_id)`. `points_ratio_type` 0/1 → product rule; 2 → category rule.
+
 | MySQL Column | PostgreSQL Column | Notes |
 |---|---|---|
+| `id` | `migrated_item_rule_id` | Original MySQL PK; stored for traceability |
 | `site_id` | `site_id` | |
-| `product_id` | `entity_id` | When `points_ratio_type` in (0,1) → product rule |
-| `product_category_id` | `entity_id` | When `points_ratio_type = 2` → category rule |
+| `points_ratio_type` | `entity_type` | `enum: {0:product, 1:product, 2:category}` |
+| `product_id` | `entity_id` | When `points_ratio_type` in (0,1) |
+| `product_category_id` | `entity_id` | When `points_ratio_type = 2` |
 | `product_name` | `name` | For product rules |
 | `product_category_name` | `name` | For category rules |
-| `points_ratio_type` | `entity_type` | `enum: {0:product, 1:product, 2:category}` |
-| `status` | `eligible` | `enum: {0:false, 1:true}` (product-level) |
-| `category_points_type` | `eligible` | For category rules |
+| `status` | `eligible` | `enum: {0:false, 1:true}`; for product rules |
+| `category_points_type` | `eligible` | Non-zero = `true`; for category rules |
 | `points_ratio` | `multiplier` | For product rules |
 | `category_points_ratio` | `multiplier` | For category rules |
 | `bonus_points` | `flat_points` | For product rules |
 | `cat_flat_points_value` | `flat_points` | For category rules |
+| `product_minimum_limit` | `min_qty_limit` | For product rules; `null` for category rules |
+| `category_max_points` | `max_points_limit` | For category rules; `null` for product rules |
+| `category_limit_type` | `limit_type` | `enum: {0:null, 1:ROLLING, 2:CALENDAR}`; for category rules |
+| `category_limit_period` | `limit_period` | `enum: {0:null, 1:DAY, 2:WEEK, 3:MONTH, 4:YEAR, 5:ANNIVERSARY}`; for category rules |
+| `category_limit_period` | `limit_value` | Same source as `limit_period`; only populated when `category_limit_type = 1` (ROLLING) |
+| `category_points_type` | `points_calculation_type` | `enum: {0:null, 1:MULTIPLIER, 2:FLAT_POINTS, 3:FLAT_POINTS_AND_MULTIPLIER}`; for category rules |
 | `create_date` | `created_at` | |
 | `update_date` | `updated_at` | |
 
@@ -2015,10 +2051,11 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 | `id` (varchar 40) | `id` | |
 | `program_name` | `name` | |
 | `program_description` | `description` | |
-| `program_status` | `status` | `enum: {1:scheduled, 2:live, 3:archived, default:draft}` |
+| `program_status` | `status` | `enum: {0:draft, 1:scheduled, 2:live, 3:archived, default:draft}` |
 | `program_start_date` | `start_date` | |
 | `program_bypass_condition` | `bypass_condition` | `enum: {0:false, 1:true}` |
 | `tier_notification` | `notification_enabled` | `enum: {0:false, 1:true}` |
+| `program_setup_status` | `setup_status` | `enum: {0:BASIC_SETUP, 1:TIERS_CONFIGURED, 2:REVIEWED, 3:COMPLETED}` |
 | `created_at` | `created_at` | |
 | `updated_at` | `updated_at` | |
 
