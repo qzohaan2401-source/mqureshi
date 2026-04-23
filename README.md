@@ -1217,10 +1217,21 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 
 | MySQL Table | PostgreSQL Table | Notes |
 |---|---|---|
-| `s15_v3_segment` | `segments` | Many MySQL rule columns go to `segment_rules` (PG-only) |
+| `s15_v3_segment` | `segments` | Core segment; many rule columns redistributed to `segment_rules` |
 | `s15_v3_segment_user_log` | `segment_members` | Filter: `is_eligible = 1` only |
 | `s15_v3_issuance_segment_purchase_qualified` | `segment_qualified_transactions` | |
-| `s15_v3_segment_and_or_mapping` | `segment_rule_groups` | Filter: `section_and_or_group = 0` only |
+| `s15_v3_segment_and_or_mapping` | `segment_rule_groups` | One row per top-level group (`section_and_or_group = 0`) |
+| `s15_v3_segment_and_or_mapping` + sub-tables | `segment_rules` | One rule per row (parents + children); supplemental data pulled per `section_id` |
+| `s15_v3_segment_loyalty_actions` | `segment_rules` | `rule_type = ACTION` (`section_id = 1`) |
+| `s15_v3_segment_loyalty_action_series` | `segment_rules` | `rule_type = ACTION_SERIES` (`section_id = 2`) |
+| `s15_v3_segment_loyalty_tier` | `segment_rules` | `rule_type = TIER` (`section_id = 3`) |
+| `s15_v3_segment_order_attribute` | `segment_rules` | `rule_type = ORDER_ATTRIBUTE` (`section_id = 17`) |
+| `s15_v3_segment_store_ids` | `segment_rules` | `rule_type = STORE` (`section_id = 13`) |
+| `s15_v3_segment_store_attribute` | `segment_rules` | `rule_type = STORE_ATTRIBUTE` (`section_id = 23`) |
+| `s15_v3_segment_issuance_product_attributes` | `segment_rules` | `rule_type = PRODUCT_ATTRIBUTE` (`section_id = 24`) |
+| `s15_v3_segment_issuance_order_attribute` | `segment_rules` | `rule_type = ORDER_ATTRIBUTE` (`section_id = 25`) |
+| Multi-source (see §8.6) | `segment_entity_sets` | One set per rule that carries a member list |
+| Multi-source (see §8.7) | `segment_entity_set_items` | One row per entity value in a set |
 
 ---
 
@@ -1279,20 +1290,208 @@ The following MySQL tables had a **UUID column added during migration prep**. Th
 
 ### 8.4 `s15_v3_segment_and_or_mapping` → `segment_rule_groups`
 
-> **Note:** Count-only comparison. Each top-level row (`section_and_or_group = 0`) in `s15_v3_segment_and_or_mapping` produces one PG `segment_rule_group`. Record-level comparison is not supported — PG `id` is an auto-generated UUID with no migrated ID stored back in MySQL.
+> **Structure:** `s15_v3_segment_and_or_mapping` rows are hierarchical. Rows where `section_and_or_group = 0` are **parents** — each becomes one `segment_rule_group`. Both parents and their children produce `segment_rules` rows (see §8.5). The `section_sequence` column is used for ordering.
 
 | MySQL Column | PostgreSQL Column | Notes |
 |---|---|---|
 | `site_id` | `site_id` | |
 | `segment_id` | `segment_id` | Lookup `segments.id` via `migrated_segment_id` |
-| *(derived)* | `order_index` | Derived from row ordering in `s15_v3_segment_and_or_mapping` |
+| *(derived)* | `order_index` | Incrementing counter (0, 1, 2…) assigned during migration per segment, ordered by `section_sequence` |
 | `db_add_date` | `created_at` | |
 | `db_update_date` | `updated_at` | |
 
 <details>
 <summary>Unmapped columns</summary>
 
-**Unmapped MySQL filter:** Only rows where `section_and_or_group = 0` produce PG rows.
+**Unmapped MySQL filter:** Only rows where `section_and_or_group = 0` produce PG rows; child rows only go to `segment_rules`.
+**Unmapped PostgreSQL:** `id` (auto-generated UUID).
+</details>
+
+---
+
+### 8.5 `s15_v3_segment_and_or_mapping` + sub-tables → `segment_rules`
+
+> **Structure:** Every row in `s15_v3_segment_and_or_mapping` (both parent and child) produces one `segment_rules` row. The `section_id` column determines the `rule_type` and which supplemental MySQL table is joined to fill in the rule's additional fields. Parent rows get `order_index = 0`; child rows get `order_index = 1, 2, 3…` within their group.
+
+**Primary source:** `s15_v3_segment_and_or_mapping`
+
+| MySQL Column | PostgreSQL Column | Notes |
+|---|---|---|
+| `site_id` | `site_id` | |
+| *(derived)* | `rule_group_id` | PG `segment_rule_groups.id` for the enclosing group |
+| `section_id` | `rule_type` | See `rule_type` enum table below |
+| *(derived per section)* | `existence_operator` | See per-section detail below |
+| `integer_range_flag` | `comparison_operator` | Default mapping; see per-section overrides below |
+| `integer_range` | `numeric_value` | Default; overridden for points/spend/product rules — see below |
+| *(derived per section)* | `numeric_value_end` | `{type}_to` from `s15_v3_segment` or `max_amount` from product tables |
+| *(null)* | `text_value` | Not populated in current migration |
+| *(derived per section)* | `attribute_key` | Attribute name resolved from attribute lookup tables — see below |
+| *(derived per section)* | `action_id` | `s15_v3_segment_loyalty_actions.action_id` — section 1 only |
+| *(derived per section)* | `action_series_id` | PG `action_series.id` via `migrated_action_series_id` — section 2 only |
+| *(derived per section)* | `tier_id` | PG `tiers.id` via `migrated_tier_id` — section 3 only |
+| *(derived per section)* | `entity_set_id` | PG `segment_entity_sets.id` — sections with member lists (see §8.6) |
+| *(derived per section)* | `order_scope` | `{1:SINGLE_ORDER, 0:MULTI_ORDER, 2:LIFETIME}` — product/category sections only |
+| *(derived per section)* | `order_metric` | `QUANTITY` or `AMOUNT` — product/category sections only |
+| *(derived per section)* | `state` | `s15_v3_segment_loyalty_action_series.action_series_flag` — section 2 only |
+| `date_range_flag` | `time_operator` | `enum: {1:ALL_TIME, 2:BEFORE, 3:AFTER, 4:BETWEEN}` |
+| `segment_from_date` | `time_start` | Skipped if `0000-00-00 00:00:00` or if `date_range_flag = 1` |
+| `segment_to_date` | `time_end` | Skipped if `0000-00-00 00:00:00` or if `date_range_flag = 1` |
+| *(derived)* | `order_index` | 0 for parent row; 1, 2, 3… for child rows within the group |
+| `db_add_date` | `created_at` | |
+| `db_update_date` | `updated_at` | |
+| *(derived per section)* | `product_scope` | `{0:SINGLE_PRODUCT, 1:MULTIPLE_PRODUCT}` — section 9 only |
+
+#### `rule_type` enum — `s15_v3_segment_and_or_mapping.section_id` mapping
+
+| `section_id` | PG `rule_type` | Primary sub-table |
+|---|---|---|
+| 1 | `ACTION` | `s15_v3_segment_loyalty_actions` |
+| 2 | `ACTION_SERIES` | `s15_v3_segment_loyalty_action_series` |
+| 3 | `TIER` | `s15_v3_segment_loyalty_tier` |
+| 4 | `AVAILABLE_POINT` | `s15_v3_segment` (`available_points_*` columns) |
+| 5 | `LIFETIME_POINT` | `s15_v3_segment` (`lifetime_points_*` columns) |
+| 6 | `REDEEMED_POINT` | `s15_v3_segment` (`redeem_points_*` columns) |
+| 7 | `EARNED_POINT` | `s15_v3_segment` (`earned_points_*` columns) |
+| 8 | `AMOUNT_SPEND` | `s15_v3_segment` (`amount_spend_*` columns) |
+| 9 | `PRODUCT` | `s15_v3_segment_product_ids` |
+| 10 | `PRODUCT_CATEGORY` | `s15_v3_segment_product_category_ids` |
+| 11 | `ORDER` | *(no sub-table; `integer_range` / `integer_range_flag` only)* |
+| 12 | `CITY` | *(no sub-table)* |
+| 13 | `STORE` | `s15_v3_segment_store_ids` |
+| 14 | `USER_ATTRIBUTE` | `s15_v3_segment_extended_attribute` + `s15_v3_user_attribute` |
+| 15 | `ZIPCODE` | `s15_v3_segment_zipcodes` |
+| 16 | `PRODUCT_ATTRIBUTE` | `s15_v3_segment_product_attributes` |
+| 17 | `ORDER_ATTRIBUTE` | `s15_v3_segment_order_attribute` + `s15_v3_order_attribute` |
+| 18 | `COUPON` | `s15_v3_segment_coupon_code` |
+| 19 | `TRANSACTION_TYPE` | `s15_v3_segment_transaction_type_ids` |
+| 20 | `SOURCE` | `s15_v3_segment_source` |
+| 21 | `USER` | `s15_v3_segment_users` + `s15_v3_segment_users_log` (merged) |
+| 22 | `SURVEY` | *(no sub-table)* |
+| 23 | `STORE_ATTRIBUTE` | `s15_v3_segment_store_attribute` + `s15_v3_store_attribute` |
+| 24 | `PRODUCT_ATTRIBUTE` | `s15_v3_segment_issuance_product_attributes` |
+| 25 | `ORDER_ATTRIBUTE` | `s15_v3_segment_issuance_order_attribute` |
+
+#### `existence_operator` derivation per section
+
+| Section | MySQL Source Column | Enum |
+|---|---|---|
+| 1 (ACTION) | `s15_v3_segment_loyalty_actions.action_flag` | `{1:EXISTS, 2:NOT_EXISTS, 5:NOT_EXISTS}` |
+| 3 (TIER) | `s15_v3_segment_loyalty_tier.tier_flag` | `{1:EXISTS, 2:NOT_EXISTS, 5:NOT_EXISTS}` |
+| 13 (STORE) | `s15_v3_segment_store_ids.segment_condition` | `{1:EXISTS, 2:NOT_EXISTS, 5:NOT_EXISTS}` |
+| 23 (STORE_ATTRIBUTE) | `s15_v3_segment_store_attribute.segment_condition` | `{1:EXISTS, 2:NOT_EXISTS, 5:NOT_EXISTS}` |
+| all others | `NULL` | Not applicable |
+
+#### `comparison_operator` derivation per section
+
+| Section(s) | MySQL Source Column | Enum |
+|---|---|---|
+| Default (most sections) | `s15_v3_segment_and_or_mapping.integer_range_flag` | `{1:GREATER_THAN, 2:LESS_THAN, 3:EQUALS, 4:NOT_EQUALS, 5:GREATER_THAN_OR_EQUAL, 6:LESS_THAN_OR_EQUAL, 7:BETWEEN}` |
+| 8 (AMOUNT_SPEND) | `s15_v3_segment.amount_spend_flag` | `{1:LESS_THAN, 2:GREATER_THAN, 3:BETWEEN, 4:EQUALS, 5:NOT_EQUALS, 6:GREATER_THAN_OR_EQUAL, 7:LESS_THAN_OR_EQUAL}` |
+| 9, 10, 16 (PRODUCT / CATEGORY / PRODUCT_ATTR) | `s15_v3_segment_and_or_mapping.integer_range_flag` | `{1:GREATER_THAN, 2:LESS_THAN, 3:BETWEEN, 4:EQUALS, 5:NOT_EQUALS}` |
+| 4 (AVAILABLE_POINT) | `s15_v3_segment.available_points_flag` | `{1:LESS_THAN, 2:GREATER_THAN, 3:BETWEEN, 4:EQUALS, 5:NOT_EQUALS}` |
+| 5 (LIFETIME_POINT) | `s15_v3_segment.lifetime_points_flag` | same |
+| 6 (REDEEMED_POINT) | `s15_v3_segment.redeem_points_flag` | same |
+| 7 (EARNED_POINT) | `s15_v3_segment.earned_points_flag` | same |
+
+#### `numeric_value` / `numeric_value_end` derivation per section
+
+| Section(s) | `numeric_value` source | `numeric_value_end` source |
+|---|---|---|
+| Default | `s15_v3_segment_and_or_mapping.integer_range` | `NULL` |
+| 8 (AMOUNT_SPEND) | `s15_v3_segment.amount_spend_from` | `s15_v3_segment.amount_spend_to` |
+| 4 (AVAILABLE_POINT) | `s15_v3_segment.available_points_from` | `s15_v3_segment.available_points_to` |
+| 5 (LIFETIME_POINT) | `s15_v3_segment.lifetime_points_from` | `s15_v3_segment.lifetime_points_to` |
+| 6 (REDEEMED_POINT) | `s15_v3_segment.redeem_points_from` | `s15_v3_segment.redeem_points_to` |
+| 7 (EARNED_POINT) | `s15_v3_segment.earned_points_from` | `s15_v3_segment.earned_points_to` |
+| 9 (PRODUCT) | `s15_v3_segment_product_ids.amount` (when `amount > 0`) | `s15_v3_segment_product_ids.max_amount` (when `max_amount > 0`) |
+| 10 (PRODUCT_CATEGORY) | `s15_v3_segment_product_category_ids.amount` | `s15_v3_segment_product_category_ids.max_amount` |
+
+#### `attribute_key` derivation per section
+
+| Section | Lookup path |
+|---|---|
+| 14 (USER_ATTRIBUTE) | `s15_v3_segment_extended_attribute.attribute_id` → `s15_v3_user_attribute.attribute_name` |
+| 17 (ORDER_ATTRIBUTE) | `s15_v3_segment_order_attribute.attribute_id` → `s15_v3_order_attribute.attribute_name` |
+| 23 (STORE_ATTRIBUTE) | `s15_v3_segment_store_attribute.attribute_value_id` → `s15_v3_store_attribute.attribute_name` |
+| 24 (issuance PRODUCT_ATTRIBUTE) | `s15_v3_segment_issuance_product_attributes.product_attribute_name` (direct value) |
+| 25 (issuance ORDER_ATTRIBUTE) | `s15_v3_segment_issuance_order_attribute.attribute_name` (direct value) |
+
+<details>
+<summary>Unmapped columns</summary>
+
+**Unmapped PostgreSQL:** `id` (auto-generated UUID).
+</details>
+
+---
+
+### 8.6 Multi-source → `segment_entity_sets`
+
+> **When created:** One `segment_entity_sets` row is created for every `segment_rules` row whose `section_id` requires a member list (sections 9, 10, 13, 14, 15, 16, 18, 20, 21, 23). The resulting PG `id` is stored back as `segment_rules.entity_set_id`.
+
+| Source | PostgreSQL Column | Notes |
+|---|---|---|
+| `site_id` | `site_id` | |
+| *(derived from section_id)* | `entity_type` | See entity type mapping table below |
+| *(derived)* | `source` | `UPLOAD` if `s15_v3_segment_upload_file_stat` has a record for `(site_id, segment_id, segment_mapping_id)`; `SEGMENT` if `s15_v3_segment.users_segment_id > 0` (section 21 only); otherwise `COMMA_SEPARATED` |
+| `s15_v3_segment.users_segment_id` | `source_segment_id` | PG `segments.id` via `migrated_segment_id`; only for section 21 when `users_segment_id > 0` |
+| `s15_v3_segment_and_or_mapping.db_add_date` | `created_at` | |
+| `s15_v3_segment_and_or_mapping.db_update_date` | `updated_at` | |
+
+#### `entity_type` mapping per `section_id`
+
+| `section_id` | PG `entity_type` | Notes |
+|---|---|---|
+| 9 | `PRODUCT` | |
+| 10 | `PRODUCT_CATEGORY` | |
+| 13 | `STORE` | |
+| 14 | `ATTRIBUTE` | USER_ATTRIBUTE collapses to ATTRIBUTE |
+| 15 | `ZIPCODE` | |
+| 16 | `ATTRIBUTE` | PRODUCT_ATTRIBUTE collapses to ATTRIBUTE |
+| 18 | `COUPON` | |
+| 20 | `SOURCE` | |
+| 21 | `USER` | |
+| 23 | `ATTRIBUTE` | STORE_ATTRIBUTE collapses to ATTRIBUTE |
+
+<details>
+<summary>Unmapped columns</summary>
+
+**Unmapped PostgreSQL:** `id` (auto-generated UUID).
+</details>
+
+---
+
+### 8.7 Multi-source → `segment_entity_set_items`
+
+> **One row per entity value.** For each `segment_entity_sets` record, one row per member entity value is inserted. The source table and `entity_id` column vary by `section_id`.
+
+| PostgreSQL Column | Source (varies by `section_id`) |
+|---|---|
+| `site_id` | `self.site_id` |
+| `entity_set_id` | PG `segment_entity_sets.id` (created in §8.6) |
+| `entity_id` | See entity source table below |
+| `created_at` | Source row `created_at`; fallback to current UTC |
+| `updated_at` | Source row `updated_at`; fallback to current UTC |
+
+#### `entity_id` source per `section_id`
+
+| `section_id` | MySQL Source Table | MySQL Column → `entity_id` |
+|---|---|---|
+| 9 (PRODUCT) | `s15_v3_segment_product_ids` | `product_id` |
+| 10 (PRODUCT_CATEGORY) | `s15_v3_segment_product_category_ids` | `category_id` |
+| 13 (STORE) | `s15_v3_segment_store_ids` | `exclude_store_id` |
+| 14 (USER_ATTRIBUTE) | `s15_v3_segment_extended_attribute` | `attribute_value` |
+| 15 (ZIPCODE) | `s15_v3_segment_zipcodes` | `zipcode` |
+| 16 (PRODUCT_ATTRIBUTE) | `s15_v3_segment_product_attributes` | `product_attribute_value` |
+| 18 (COUPON) | `s15_v3_segment_coupon_code` | `coupon_code` |
+| 20 (SOURCE) | `s15_v3_segment_source` | `source` |
+| 21 (USER) | `s15_v3_segment_users` + `s15_v3_segment_users_log` (merged by `entity_id`) | `users` / `user` |
+| 23 (STORE_ATTRIBUTE) | `s15_v3_segment_store_attribute` | `attribute_value` |
+
+> **Section 21 special case:** `s15_v3_segment_users_log` (filter: `user_status = 1`) and `s15_v3_segment_users` are merged on `entity_id`. If `s15_v3_segment.users_segment_id > 0`, no items are inserted — the set references the source segment instead (see `source_segment_id` in §8.6).
+
+<details>
+<summary>Unmapped columns</summary>
+
 **Unmapped PostgreSQL:** `id` (auto-generated UUID).
 </details>
 
@@ -1942,11 +2141,9 @@ The following MySQL tables have **no identified PostgreSQL destination** and hav
 
 The following PostgreSQL tables are **new in the PG schema** and have no direct MySQL source table:
 
-| PostgreSQL Table | Notes |
-|---|---|
-| `segment_rules` | New PG structure for segment rule conditions (sourced from denormalized columns in `s15_v3_segment`) |
-| `segment_entity_sets` | New PG structure for segment entity set definitions |
-| `segment_entity_set_items` | New PG structure for items in entity sets |
+> **Note:** `segment_rules`, `segment_entity_sets`, and `segment_entity_set_items` were previously listed here. They are **fully documented** in [§8.5](#85-s15_v3_segment_and_or_mapping--sub-tables--segment_rules), [§8.6](#86-multi-source--segment_entity_sets), and [§8.7](#87-multi-source--segment_entity_set_items) with their MySQL source mappings.
+
+*(No remaining tables without MySQL sources.)*
 
 ---
 
